@@ -15,6 +15,12 @@ pipeline {
         // The DOCKER_HOST variable tells the docker client (in the 'builder' container)
         // to connect to the dind container over the local pod network.
         DOCKER_HOST = 'tcp://localhost:2376'
+        
+        // Point to the shared directory where dind places its certs
+        DOCKER_CERT_PATH = '/certs/client'
+        
+        // Enable TLS, but don't verify the self-signed certificate
+        DOCKER_TLS_VERIFY = '1' 
     }
 
     stages {

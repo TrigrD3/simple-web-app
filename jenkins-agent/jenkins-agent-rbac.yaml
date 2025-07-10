@@ -1,0 +1,33 @@
+# jenkins-agent-rbac.yaml
+
+# First, ensure the target namespace exists. Helm can't create it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: simple-web-app
+---
+# Define a Role with the permissions Helm needs in the 'simple-web-app' namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-deploy-role
+  namespace: simple-web-app # Permissions are granted IN this namespace
+rules:
+- apiGroups: ["", "apps", "extensions", "networking.k8s.io"] # The API groups for the resources
+  resources: ["secrets", "pods", "services", "deployments", "ingresses", "replicasets"] # The resources Helm will manage
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"] # The actions it can perform
+---
+# Bind the Role to the Jenkins agent's Service Account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-deploy-binding
+  namespace: simple-web-app # The binding is created IN this namespace
+subjects:
+- kind: ServiceAccount
+  name: default # The name of the Service Account the agent pod uses
+  namespace: jenkins # The namespace where the Jenkins agent pod runs
+roleRef:
+  kind: Role
+  name: jenkins-deploy-role # The name of the Role we just defined
+  apiGroup: rbac.authorization.k8s.io

@@ -10,6 +10,10 @@ rules:
 - apiGroups: ["", "apps", "extensions", "networking.k8s.io"] # The API groups for the resources
   resources: ["secrets", "pods", "services", "deployments", "ingresses", "replicasets", "serviceaccounts"] # The resources Helm will manage
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"] # The actions it can perform
+
+- apiGroups: ["autoscaling"] # The API groups for the resources
+  resources: ["horizontalpodautoscalers"] # The resources Helm will manage
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"] # The actions it can perform
 ---
 # Bind the Role to the Jenkins agent's Service Account.
 apiVersion: rbac.authorization.k8s.io/v1

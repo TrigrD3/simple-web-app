@@ -36,8 +36,17 @@ func getDate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		http.Error(w, "Failed to load timezone", http.StatusInternalServerError)
+		return
+	}
+
+	jakartaTime := time.Now().In(loc)
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(DateResponse{Date: time.Now().Format(time.RFC3339)})
+	json.NewEncoder(w).Encode(DateResponse{Date: jakartaTime.Format(time.RFC3339)}) 
 }
 
 func printRequest(w http.ResponseWriter, r *http.Request) {

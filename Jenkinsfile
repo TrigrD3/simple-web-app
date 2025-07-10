@@ -1,62 +1,79 @@
 pipeline {
-    // Use the Kubernetes plugin to spin up a pod based on the 'docker-builder' template
+    // This agent block defines the pod where our pipeline will run.
+    // It uses the template configured in the Jenkins UI.
     agent {
         kubernetes {
-            label 'docker-builder' // Must match the label you set in the Pod Template
-            defaultContainer 'builder' // The container where 'sh' steps will run
+            label 'docker-builder'          // Must match the label in your Pod Template
+            defaultContainer 'builder'      // The container where steps run. This now has docker & helm.
         }
     }
 
+    // Environment variables are available throughout the pipeline via the 'env' object.
     environment {
-        // This remains the same
-        DOCKER_HUB_CREDENTIALS = 'cab54931-41e6-4f0f-be37-aaaf1e94168e'
-        IMAGE_NAME = 'trigrd/simple-web-app'
-        IMAGE_TAG = "${env.BUILD_NUMBER}"
-        // The DOCKER_HOST variable tells the docker client (in the 'builder' container)
-        // to connect to the dind container over the local pod network.
-        DOCKER_HOST = 'tcp://localhost:2376'
-        
-        // Point to the shared directory where dind places its certs
-        DOCKER_CERT_PATH = '/certs/client'
-        
-        // Enable TLS, but don't verify the self-signed certificate
-        DOCKER_TLS_VERIFY = '1' 
+        // User-defined variables
+        DOCKER_HUB_CREDENTIALS = 'cab54931-41e6-4f0f-be37-aaaf1e94168e' // Your Jenkins credential ID for Docker Hub
+        IMAGE_NAME             = 'trigrd/simple-web-app'                // Your Docker Hub repository name
+        IMAGE_TAG              = "${env.BUILD_NUMBER}"                  // Use the Jenkins build number for a unique image tag
+        HELM_CHART_PATH        = 'simple-web-app'                       // The relative path to your Helm chart directory in the repo
+        HELM_RELEASE_NAME      = 'go-web-app'                       // The name for your Helm deployment release
+        KUBE_NAMESPACE         = 'simple-web-app'                              // The Kubernetes namespace to deploy the application to
+
+        // Docker-in-Docker (dind) configuration for the agent pod
+        DOCKER_HOST        = 'tcp://localhost:2376'                     // Tell the Docker client to connect to the dind secure port
+        DOCKER_CERT_PATH   = '/certs/client'                            // Tell the client where to find the TLS certs from the shared volume
+        DOCKER_TLS_VERIFY  = '1'                                        // Enforce TLS communication with the dind sidecar
     }
 
     stages {
+        // This initial stage is a safety check to ensure the dind sidecar is ready.
         stage('Wait for Docker Daemon') {
             steps {
-                // The dind container can take a few seconds to start.
-                // This step ensures the Docker daemon is ready before we try to use it.
-                sh 'while ! docker info; do echo "Waiting for docker daemon..."; sleep 1; done'
+                sh 'echo "Waiting for Docker daemon to be ready..."; while ! docker info; do sleep 1; done; echo "Docker daemon is ready."'
             }
         }
-        
+
+        // This stage builds the application's Docker image and pushes it to your registry.
         stage('Build and Push Docker Image') {
             steps {
-                // These steps will now run inside the 'builder' container
-                // and communicate with the 'dind' container.
-                withCredentials([usernamePassword(credentialsId: DOCKER_HUB_CREDENTIALS, passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
+                // Use withCredentials to securely inject Docker Hub username and password
+                withCredentials([usernamePassword(credentialsId: env.DOCKER_HUB_CREDENTIALS, passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
                     sh "echo \"$DOCKER_PASSWORD\" | docker login -u \"$DOCKER_USERNAME\" --password-stdin"
                 }
+
+                // Build the image using the Dockerfile in the root of the repository
                 sh "docker build -t ${env.IMAGE_NAME}:${env.IMAGE_TAG} ."
+
+                // Push the newly built image to Docker Hub
                 sh "docker push ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
             }
         }
 
-        // The 'Deploy' stage will need 'helm' installed in the build container.
-        // To fix that, you'd use a custom image like 'alpine/helm' instead of 'docker:latest'
-        // or build your own image with all necessary tools.
+        // This stage uses Helm to deploy your application to the Kubernetes cluster.
         stage('Deploy to Kubernetes') {
             steps {
-                echo "Skipping deploy for now, as helm is not in the 'docker:latest' image."
+                script {
+                    // Use 'helm upgrade --install' to either create the release or update it if it already exists.
+                    // We use '--set' to dynamically inject the correct image repository and tag into the Helm chart,
+                    // which is cleaner than modifying files with 'sed'.
+                    sh """
+                        helm upgrade --install ${env.HELM_RELEASE_NAME} ./${env.HELM_CHART_PATH} \
+                             --namespace ${env.KUBE_NAMESPACE} \
+                             --set image.repository=${env.IMAGE_NAME} \
+                             --set image.tag=${env.IMAGE_TAG} \
+                             --wait
+                    """
+                }
             }
         }
     }
 
+    // The 'post' block runs after all stages are completed.
     post {
+        // 'always' will run regardless of whether the pipeline succeeded or failed.
         always {
-            // This now works correctly within the pod's context.
+            // Good practice to clean up the build environment.
+            // This removes the large Docker image from the agent pod to free up space.
+            echo "Cleaning up Docker image from the build agent..."
             sh "docker rmi ${env.IMAGE_NAME}:${env.IMAGE_TAG} || true"
         }
     }

@@ -49,7 +49,7 @@ pipeline {
 
     post {
         always {
-            sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
+            sh "docker rmi ${env.IMAGE_NAME}:${env.IMAGE_TAG} || true"
         }
     }
 }

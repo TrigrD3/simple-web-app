@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"os"
 	"os/exec"
 	"time"
 )
@@ -15,6 +16,10 @@ type DateResponse struct {
 
 type ShellResponse struct {
 	KernelVersion string `json:"kernel_version"`
+}
+
+type PodInfoResponse struct {
+	PodName string `json:"pod_name"`
 }
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +70,16 @@ func getShell(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(ShellResponse{KernelVersion: string(out)})
 }
 
+func getPodName(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	podName := os.Getenv("HOSTNAME") // In Kubernetes, HOSTNAME env var is usually the pod name
+	json.NewEncoder(w).Encode(PodInfoResponse{PodName: podName})
+}
+
 func homePage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -90,10 +105,12 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 		<button onclick="getHealth()">Health Check (GET)</button>
 		<button onclick="getDate()">Get Date (GET)</button>
 
-		<p>Enter JSON for /print (POST):</p>
-		<textarea id="printRequestBody">{"key": "value", "number": 123}</textarea>
+		<p>Enter text for /print (POST):</p>
+		<textarea id="printRequestBody">Hello World!</textarea>
 		<button onclick="postPrint()">Print Request Body (POST)</button>
 		<button onclick="postShell()">Get Kernel Version (POST)</button>
+
+		<button onclick="getPodName()">Get Pod Name (GET)</button>
 
 		<div class="response" id="response"></div>
 
@@ -153,6 +170,17 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 					responseDiv.textContent = 'Error calling /shell:\n' + error;
 				}
 			}
+
+			async function getPodName() {
+				const responseDiv = document.getElementById('response');
+				try {
+					const response = await fetch('/pod-name');
+					const result = await response.json();
+					responseDiv.textContent = 'Response from /pod-name:\n' + JSON.stringify(result, null, 2);
+				} catch (error) {
+					responseDiv.textContent = 'Error calling /pod-name:\n' + error;
+				}
+			}
 		</script>
 	</body>
 	</html>
@@ -172,6 +200,7 @@ func main() {
 	http.HandleFunc("/date", getDate)
 	http.HandleFunc("/print", printRequest)
 	http.HandleFunc("/shell", getShell)
+	http.HandleFunc("/pod-name", getPodName)
 
 	fmt.Println("Server starting on port 8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {

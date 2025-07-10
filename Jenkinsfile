@@ -14,7 +14,7 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         // The DOCKER_HOST variable tells the docker client (in the 'builder' container)
         // to connect to the dind container over the local pod network.
-        DOCKER_HOST = 'tcp://localhost:2375'
+        DOCKER_HOST = 'tcp://localhost:2376'
     }
 
     stages {

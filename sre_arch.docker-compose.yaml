@@ -1,0 +1,129 @@
+# docker-compose.yml untuk pengembangan lokal menggunakan image yang sudah ada
+version: '3.8'
+
+services:
+  # 1. Infrastruktur Inti
+  postgres:
+    image: postgres:14-alpine
+    container_name: postgres-db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: payment_gateway_db
+    ports:
+      - "5432:5432" # Terbuka untuk koneksi dari DB client di mesin lokal
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  rabbitmq:
+    image: rabbitmq:3.9-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"   # Port protokol AMQP
+      - "15672:15672" # Port untuk Web UI Management
+    networks:
+      - backend
+
+  # 2. API Gateway - Pintu Masuk Tunggal
+  api-gateway:
+    image: nginx:1.21-alpine
+    container_name: api-gateway
+    ports:
+      - "8080:80" # Akses dari luar melalui port 8080
+    volumes:
+      # Mount file konfigurasi Nginx dari direktori lokal
+      # Anda perlu membuat file nginx.conf ini
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - auth-service
+      - va-service
+    networks:
+      - backend
+
+  # 3. Layanan Aplikasi (Menggunakan Image Placeholder 'echo-server')
+  # Image ini akan merespons dengan detail request yang diterimanya,
+  # membuktikan bahwa routing dan konfigurasi berfungsi.
+  
+  auth-service:
+    image: ealen/echo-server:latest
+    container_name: auth-service
+    environment:
+      # Variabel ini ada untuk mensimulasikan konfigurasi nyata
+      - DATABASE_URL=postgresql://user:password@postgres:5432/payment_gateway_db
+    networks:
+      - backend
+
+  va-service:
+    image: ealen/echo-server:latest
+    container_name: va-service
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/payment_gateway_db
+      - BCA_ADAPTER_URL=http://bca-adapter:80
+      - PERMATA_ADAPTER_URL=http://permata-adapter:80
+      - CIMB_ADAPTER_URL=http://cimb-adapter:80
+    networks:
+      - backend
+
+  payment-processing-service:
+    image: ealen/echo-server:latest
+    container_name: payment-processing-service
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - VA_SERVICE_URL=http://va-service:80
+    networks:
+      - backend
+
+  ledger-service:
+    image: ealen/echo-server:latest
+    container_name: ledger-service
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/payment_gateway_db
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    networks:
+      - backend
+
+  notification-service:
+    image: ealen/echo-server:latest
+    container_name: notification-service
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    networks:
+      - backend
+
+  # 4. Adapter Bank (Juga menggunakan 'echo-server')
+  bca-adapter:
+    image: ealen/echo-server:latest
+    container_name: bca-adapter
+    networks:
+      - backend
+      
+  permata-adapter:
+    image: ealen/echo-server:latest
+    container_name: permata-adapter
+    networks:
+      - backend
+
+  cimb-adapter:
+    image: ealen/echo-server:latest
+    container_name: cimb-adapter
+    networks:
+      - backend
+
+# Jaringan internal untuk komunikasi antar service
+networks:
+  backend:
+    driver: bridge
+
+# Volume untuk persistensi data database
+volumes:
+  postgres_data: {}
+
+
+# Cara Menguji
+# Cek RabbitMQ: Buka http://localhost:15672 di browser Anda (login: guest / guest).
+# Cek API Gateway & Routing:
+# Buka http://localhost:8080/va/test di browser. Anda akan melihat respons dari va-service (via echo-server) yang menampilkan detail request.
+# Buka http://localhost:8080/auth/user1 di browser. Anda akan melihat respons dari auth-service.
+# Ini membuktikan bahwa API Gateway Anda berhasil meneruskan lalu lintas ke layanan yang benar di dalam jaringan Docker.

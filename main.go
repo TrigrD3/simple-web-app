@@ -22,11 +22,6 @@ type PodInfoResponse struct {
 	PodName string `json:"pod_name"`
 }
 
-type ImageInfoResponse struct {
-	ImageName string `json:"image_name"`
-	ImageTag  string `json:"image_tag"`
-}
-
 func healthCheck(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -94,17 +89,6 @@ func getPodName(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(PodInfoResponse{PodName: podName})
 }
 
-func getImageInfo(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	imageName := os.Getenv("APP_IMAGE_NAME")
-	imageTag := os.Getenv("APP_IMAGE_TAG")
-	json.NewEncoder(w).Encode(ImageInfoResponse{ImageName: imageName, ImageTag: imageTag})
-}
-
 func homePage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -136,7 +120,6 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 		<button onclick="postShell()">Get Kernel Version (POST)</button>
 
 		<button onclick="getPodName()">Get Pod Name (GET)</button>
-		<button onclick="getImageInfo()">Get Image Info (GET)</button>
 
 		<div class="response" id="response"></div>
 
@@ -207,17 +190,6 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 					responseDiv.textContent = 'Error calling /pod-name:\n' + error;
 				}
 			}
-
-			async function getImageInfo() {
-				const responseDiv = document.getElementById('response');
-				try {
-					const response = await fetch('/image-info');
-					const result = await response.json();
-					responseDiv.textContent = 'Response from /image-info:\n' + JSON.stringify(result, null, 2);
-				} catch (error) {
-					responseDiv.textContent = 'Error calling /image-info:\n' + error;
-				}
-			}
 		</script>
 	</body>
 	</html>
@@ -238,7 +210,6 @@ func main() {
 	http.HandleFunc("/print", printRequest)
 	http.HandleFunc("/shell", getShell)
 	http.HandleFunc("/pod-name", getPodName)
-	http.HandleFunc("/image-info", getImageInfo)
 
 	fmt.Println("Server starting on port 8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {

@@ -108,7 +108,7 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 		</style>
 	</head>
 	<body>
-		<h1>Welcome to Simple Web App</h1>
+		<h1>Welcome to Primasys Interview</h1>
 		<p>Click the buttons below to interact with the services:</p>
 
 		<button onclick="getHealth()">Health Check (GET)</button>
